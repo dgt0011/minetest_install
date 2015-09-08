@@ -19,6 +19,7 @@ mt_color_grey  = "#AAAAAA"
 mt_color_blue  = "#0000DD"
 mt_color_green = "#00DD00"
 mt_color_dark_green = "#003300"
+local iseidy = true -- dump(core.setting_getbool("eidy_mode"))
 
 --for all other colors ask sfan5 to complete his work!
 
@@ -38,23 +39,35 @@ dofile(menupath .. DIR_DELIM .. "gamemgr.lua")
 dofile(menupath .. DIR_DELIM .. "modmgr.lua")
 dofile(menupath .. DIR_DELIM .. "store.lua")
 dofile(menupath .. DIR_DELIM .. "dlg_config_world.lua")
-dofile(menupath .. DIR_DELIM .. "tab_credits.lua")
+
+if iseidy then
+	tabtype = "eidy_"
+else
+	tabtype = ""
+end
+dofile(menupath .. DIR_DELIM .. "tab_" .. tabtype .. "credits.lua")
 dofile(menupath .. DIR_DELIM .. "tab_mods.lua")
 dofile(menupath .. DIR_DELIM .. "tab_settings.lua")
+
+ 
 if PLATFORM ~= "Android" then
 	dofile(menupath .. DIR_DELIM .. "dlg_create_world.lua")
 	dofile(menupath .. DIR_DELIM .. "dlg_delete_mod.lua")
 	dofile(menupath .. DIR_DELIM .. "dlg_delete_world.lua")
 	dofile(menupath .. DIR_DELIM .. "dlg_rename_modpack.lua")
-	dofile(menupath .. DIR_DELIM .. "tab_multiplayer.lua")
-	dofile(menupath .. DIR_DELIM .. "tab_server.lua")
+	
+	dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."multiplayer.lua")
+	dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."server.lua")
+
 	dofile(menupath .. DIR_DELIM .. "tab_singleplayer.lua")
 	dofile(menupath .. DIR_DELIM .. "tab_texturepacks.lua")
 	dofile(menupath .. DIR_DELIM .. "textures.lua")
+elseif iseidy then
+	dofile(menupath .. DIR_DELIM .. "tab_eidy_main.lua")
 else
 	dofile(menupath .. DIR_DELIM .. "tab_simple_main.lua")
 end
-
+ 
 --------------------------------------------------------------------------------
 local function main_event_handler(tabview, event)
 	if event == "MenuQuit" then
@@ -94,26 +107,40 @@ local function init_globals()
 		mm_texture.init()
 	else
 		local world_list = core.get_worlds()
-
-		local found_singleplayerworld = false
-
-		for i,world in pairs(world_list) do
-			if world.name == "singleplayerworld" then
-				found_singleplayerworld = true
-				gamedata.worldindex = i
-				break
-			end
+		
+		local found_eid_world = false
+		
+		if iseidy then		
+			for i,world in pairs(world_list) do
+				if world.name == "eid" then
+					found_eid_world = true
+					gamedata.worldindex = i
+					break
+				end
+			end		
 		end
 
-		if not found_singleplayerworld then
-			core.create_world("singleplayerworld", 1)
-
-			local world_list = core.get_worlds()
+		if not iseidy or not found_eid_world then
+			local found_singleplayerworld = false
 
 			for i,world in pairs(world_list) do
 				if world.name == "singleplayerworld" then
+					found_singleplayerworld = true
 					gamedata.worldindex = i
 					break
+				end
+			end
+
+			if not found_singleplayerworld then
+				core.create_world("singleplayerworld", 1)
+
+				local world_list = core.get_worlds()
+
+				for i,world in pairs(world_list) do
+					if world.name == "singleplayerworld" then
+						gamedata.worldindex = i
+						break
+					end
 				end
 			end
 		end
@@ -125,17 +152,26 @@ local function init_globals()
 		tv_main:set_autosave_tab(true)
 	end
 	if PLATFORM ~= "Android" then
-		tv_main:add(tab_singleplayer)
+	    if not iseidy then
+			tv_main:add(tab_singleplayer)
+		end
+	    tv_main:add(tab_server)
 		tv_main:add(tab_multiplayer)
-		tv_main:add(tab_server)
+
 	else
 		tv_main:add(tab_simple_main)
 	end
-	tv_main:add(tab_settings)
-	if PLATFORM ~= "Android" then
-		tv_main:add(tab_texturepacks)
+	if not iseidy then
+	   tv_main:add(tab_settings)
 	end
-	tv_main:add(tab_mods)
+	if PLATFORM ~= "Android" then
+	    if not iseidy then
+			tv_main:add(tab_texturepacks)
+		end
+	end
+	if not iseidy then
+		tv_main:add(tab_mods)
+	end
 	tv_main:add(tab_credits)
 
 	tv_main:set_global_event_handler(main_event_handler)
