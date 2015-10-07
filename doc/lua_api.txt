@@ -393,13 +393,13 @@ Examples of sound parameter tables:
     {
         pos = {x=1,y=2,z=3},
         gain = 1.0, -- default
-        max_hear_distance = 32, -- default
+        max_hear_distance = 32, -- default, uses an euclidean metric
     }
     -- Play connected to an object, looped
     {
         object = <an ObjectRef>,
         gain = 1.0, -- default
-        max_hear_distance = 32, -- default
+        max_hear_distance = 32, -- default, uses an euclidean metric
         loop = true, -- only sounds connected to objects can be looped
     }
 
@@ -538,6 +538,10 @@ node definition:
       0 = y+    1 = z+    2 = z-    3 = x+    4 = x-    5 = y-
       facedir's two less significant bits are rotation around the axis
     paramtype2 == "leveled"
+    paramtype2 == "degrotate"
+    ^ The rotation of this node is stored in param2. Plants are rotated this way.
+      Values range 0 - 179. The value stored in param2 is multiplied by two to
+      get the actual rotation of the node.
     collision_box = {
       type = "fixed",
       fixed = {
@@ -1664,7 +1668,7 @@ numerical form, the raw integer value of an ARGB8 quad:
 or string form, a ColorString (defined above):
     `colorspec = "green"`
 
-Vector helpers
+Spatial Vectors
 --------------
 
 * `vector.new([x[, y, z]])`: returns a vector.
@@ -1682,8 +1686,8 @@ For the following functions `x` can be either a vector or a number:
 
 * `vector.add(v, x)`: returns a vector
 * `vector.subtract(v, x)`: returns a vector
-* `vector.multiply(v, x)`: returns a vector
-* `vector.divide(v, x)`: returns a vector
+* `vector.multiply(v, x)`: returns a scaled vector or Schur product
+* `vector.divide(v, x)`: returns a scaled vector or Schur quotient
 
 Helper functions
 -----------------
@@ -1708,6 +1712,8 @@ Helper functions
     * Convert position to a printable string
 * `minetest.string_to_pos(string)`: returns a position
     * Same but in reverse. Returns `nil` if the string can't be parsed to a position.
+* `minetest.string_to_area("(X1, Y1, Z1) (X2, Y2, Z2)")`: returns two positions
+    * Converts a string representing an area box into two positions
 * `minetest.formspec_escape(string)`: returns a string
     * escapes the characters "[", "]", "\", "," and ";", which can not be used in formspecs
 * `minetest.is_yes(arg)`
@@ -1969,11 +1975,13 @@ and `minetest.auth_reload` call the authetification handler.
     * Returns `ObjectRef`, or `nil` if failed
 * `minetest.get_player_by_name(name)`: Get an `ObjectRef` to a player
 * `minetest.get_objects_inside_radius(pos, radius)`
+    * `radius`: using an euclidean metric
 * `minetest.set_timeofday(val)`
     * `val` is between `0` and `1`; `0` for midnight, `0.5` for midday
 * `minetest.get_timeofday()`
 * `minetest.get_gametime()`: returns the time, in seconds, since the world was created
 * `minetest.find_node_near(pos, radius, nodenames)`: returns pos or `nil`
+    * `radius`: using a maximum metric
     * `nodenames`: e.g. `{"ignore", "group:tree"}` or `"default:dirt"`
 * `minetest.find_nodes_in_area(minp, maxp, nodenames)`: returns a list of positions
     * returns as second value a table with the count of the individual nodes found
@@ -1995,6 +2003,9 @@ and `minetest.auth_reload` call the authetification handler.
 * `get_gen_notify()`: returns a flagstring and a table with the deco_ids
 * `minetest.get_mapgen_object(objectname)`
     * Return requested mapgen object if available (see "Mapgen objects")
+* `minetest.get_biome_id(biome_name)`
+    * Returns the biome id, as used in the biomemap Mapgen object, for a
+      given biome_name string.
 * `minetest.get_mapgen_params()` Returns mapgen parameters, a table containing
   `mgname`, `seed`, `chunksize`, `water_level`, and `flags`.
 * `minetest.set_mapgen_params(MapgenParams)`
@@ -2020,6 +2031,9 @@ and `minetest.auth_reload` call the authetification handler.
     * `pos1` and `pos2` are optional and default to mapchunk minp and maxp.
 * `minetest.clear_objects()`
     * clear all objects in the environments
+* `minetest.emerge_area(pos1, pos2)`
+    * queues all mapblocks in the area from pos1 to pos2, inclusive, for emerge
+    * i.e. asynchronously loads blocks from disk, or if inexistent, generates them
 * `minetest.delete_area(pos1, pos2)`
     * delete all mapblocks in the area from pos1 to pos2, inclusive
 * `minetest.line_of_sight(pos1, pos2, stepsize)`: returns `boolean, pos`
@@ -2034,7 +2048,7 @@ and `minetest.auth_reload` call the authetification handler.
     * returns a table of 3D points representing a path from `pos1` to `pos2` or `nil`
     * `pos1`: start position
     * `pos2`: end position
-    * `searchdistance`: number of blocks to search in each direction
+    * `searchdistance`: number of blocks to search in each direction using a maximum metric
     * `max_jump`: maximum height difference to consider walkable
     * `max_drop`: maximum height difference to consider droppable
     * `algorithm`: One of `"A*_noprefetch"` (default), `"A*"`, `"Dijkstra"`
@@ -3209,14 +3223,17 @@ Definition tables
         },
 
         on_construct = func(pos), --[[
-        ^ Node constructor; always called after adding node
+        ^ Node constructor; called after adding node
         ^ Can set up metadata and stuff like that
+        ^ Not called for bulk node placement (i.e. schematics and VoxelManip)
         ^ default: nil ]]
         on_destruct = func(pos), --[[
-        ^ Node destructor; always called before removing node
+        ^ Node destructor; called before removing node
+        ^ Not called for bulk node placement (i.e. schematics and VoxelManip)
         ^ default: nil ]]
         after_destruct = func(pos, oldnode), --[[
-        ^ Node destructor; always called after removing node
+        ^ Node destructor; called after removing node
+        ^ Not called for bulk node placement (i.e. schematics and VoxelManip)
         ^ default: nil ]]
 
         after_place_node = func(pos, placer, itemstack, pointed_thing) --[[
