@@ -74,7 +74,8 @@ core.register_entity(":__builtin:item", {
 		return core.serialize({
 			itemstring = self.itemstring,
 			always_collect = self.always_collect,
-			age = self.age
+			age = self.age,
+			dropped_by = self.dropped_by
 		})
 	end,
 
@@ -89,6 +90,7 @@ core.register_entity(":__builtin:item", {
 				else
 					self.age = dtime_s
 				end
+				self.dropped_by = data.dropped_by
 			end
 		else
 			self.itemstring = staticdata
@@ -200,9 +202,10 @@ core.register_entity(":__builtin:item", {
 	end,
 
 	on_punch = function(self, hitter)
-		if self.itemstring ~= '' then
-			local left = hitter:get_inventory():add_item("main", self.itemstring)
-			if not left:is_empty() then
+		local inv = hitter:get_inventory()
+		if inv and self.itemstring ~= '' then
+			local left = inv:add_item("main", self.itemstring)
+			if left and not left:is_empty() then
 				self.itemstring = left:to_string()
 				return
 			end

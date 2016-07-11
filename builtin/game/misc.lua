@@ -4,88 +4,81 @@
 -- Misc. API functions
 --
 
-local timers = {}
-local mintime
-local function update_timers(delay)
-	mintime = false
-	local sub = 0
-	for index = 1, #timers do
-		index = index - sub
-		local timer = timers[index]
-		timer.time = timer.time - delay
-		if timer.time <= 0 then
-			core.set_last_run_mod(timer.mod_origin)
-			timer.func(unpack(timer.args or {}))
-			table.remove(timers, index)
-			sub = sub + 1
-		elseif mintime then
-			mintime = math.min(mintime, timer.time)
-		else
-			mintime = timer.time
+local jobs = {}
+local time = 0.0
+local last = core.get_us_time() / 1000000
+
+core.register_globalstep(function(dtime)
+	local new = core.get_us_time() / 1000000
+	if new > last then
+		time = time + (new - last)
+	else
+		-- Overflow, we may lose a little bit of time here but
+		-- only 1 tick max, potentially running timers slightly
+		-- too early.
+		time = time + new
+	end
+	last = new
+
+	if #jobs < 1 then
+		return
+	end
+
+	-- Iterate backwards so that we miss any new timers added by
+	-- a timer callback, and so that we don't skip the next timer
+	-- in the list if we remove one.
+	for i = #jobs, 1, -1 do
+		local job = jobs[i]
+		if time >= job.expire then
+			core.set_last_run_mod(job.mod_origin)
+			job.func(unpack(job.arg))
+			table.remove(jobs, i)
 		end
 	end
-end
-
-local timers_to_add
-local function add_timers()
-	for _, timer in ipairs(timers_to_add) do
-		table.insert(timers, timer)
-	end
-	timers_to_add = false
-end
-
-local delay = 0
-core.register_globalstep(function(dtime)
-	if not mintime then
-		-- abort if no timers are running
-		return
-	end
-	if timers_to_add then
-		add_timers()
-	end
-	delay = delay + dtime
-	if delay < mintime then
-		return
-	end
-	update_timers(delay)
-	delay = 0
 end)
 
-function core.after(time, func, ...)
+function core.after(after, func, ...)
 	assert(tonumber(time) and type(func) == "function",
 			"Invalid core.after invocation")
-	if not mintime then
-		mintime = time
-		timers_to_add = {{
-			time   = time+delay,
-			func   = func,
-			args   = {...},
-			mod_origin = core.get_last_run_mod(),
-		}}
-		return
-	end
-	mintime = math.min(mintime, time)
-	timers_to_add = timers_to_add or {}
-	timers_to_add[#timers_to_add+1] = {
-		time   = time+delay,
-		func   = func,
-		args   = {...},
-		mod_origin = core.get_last_run_mod(),
+	jobs[#jobs + 1] = {
+		func = func,
+		expire = time + after,
+		arg = {...},
+		mod_origin = core.get_last_run_mod()
 	}
 end
 
-function core.check_player_privs(name, privs)
+function core.check_player_privs(player_or_name, ...)
+	local name = player_or_name
+	-- Check if we have been provided with a Player object.
+	if type(name) ~= "string" then
+		name = name:get_player_name()
+	end
+	
+	local requested_privs = {...}
 	local player_privs = core.get_player_privs(name)
 	local missing_privileges = {}
-	for priv, val in pairs(privs) do
-		if val
-		and not player_privs[priv] then
-			table.insert(missing_privileges, priv)
+	
+	if type(requested_privs[1]) == "table" then
+		-- We were provided with a table like { privA = true, privB = true }.
+		for priv, value in pairs(requested_privs[1]) do
+			if value and not player_privs[priv] then
+				missing_privileges[#missing_privileges + 1] = priv
+			end
+		end
+	else
+		-- Only a list, we can process it directly.
+		for key, priv in pairs(requested_privs) do
+			if not player_privs[priv] then
+				missing_privileges[#missing_privileges + 1] = priv
+			end
 		end
 	end
+	
 	if #missing_privileges > 0 then
 		return false, missing_privileges
 	end
+	
 	return true, ""
 end
 
@@ -103,7 +96,7 @@ function core.get_connected_players()
 	local temp_table = {}
 	for index, value in pairs(player_list) do
 		if value:is_player_connected() then
-			table.insert(temp_table, value)
+			temp_table[#temp_table + 1] = value
 		end
 	end
 	return temp_table
@@ -185,3 +178,54 @@ function core.raillike_group(name)
 	end
 	return id
 end
+
+-- HTTP callback interface
+function core.http_add_fetch(httpenv)
+	httpenv.fetch = function(req, callback)
+		local handle = httpenv.fetch_async(req)
+
+		local function update_http_status()
+			local res = httpenv.fetch_async_get(handle)
+			if res.completed then
+				callback(res)
+			else
+				core.after(0, update_http_status)
+			end
+		end
+		core.after(0, update_http_status)
+	end
+
+	return httpenv
+end
+
+if minetest.setting_getbool("disable_escape_sequences") then
+
+	function core.get_color_escape_sequence(color)
+		return ""
+	end
+
+	function core.get_background_escape_sequence(color)
+		return ""
+	end
+
+	function core.colorize(color, message)
+		return message
+	end
+
+else
+
+	local ESCAPE_CHAR = string.char(0x1b)
+	function core.get_color_escape_sequence(color)
+		return ESCAPE_CHAR .. "(c@" .. color .. ")"
+	end
+
+	function core.get_background_escape_sequence(color)
+		return ESCAPE_CHAR .. "(b@" .. color .. ")"
+	end
+
+	function core.colorize(color, message)
+		return core.get_color_escape_sequence(color) .. message .. core.get_color_escape_sequence("#ffffff")
+	end
+
+end
+
