@@ -19,6 +19,7 @@ mt_color_grey  = "#AAAAAA"
 mt_color_blue  = "#0000DD"
 mt_color_green = "#00DD00"
 mt_color_dark_green = "#003300"
+local iseidy = true -- dump(core.setting_getbool("eidy_mode"))
 
 --for all other colors ask sfan5 to complete his work!
 
@@ -41,6 +42,17 @@ dofile(menupath .. DIR_DELIM .. "textures.lua")
 
 dofile(menupath .. DIR_DELIM .. "dlg_config_world.lua")
 dofile(menupath .. DIR_DELIM .. "dlg_settings_advanced.lua")
+
+if iseidy then
+	tabtype = "eidy_"
+else
+	tabtype = ""
+end
+dofile(menupath .. DIR_DELIM .. "tab_" .. tabtype .. "credits.lua")
+
+dofile(menupath .. DIR_DELIM .. "tab_mods.lua")
+dofile(menupath .. DIR_DELIM .. "tab_settings.lua")
+ 
 if PLATFORM ~= "Android" then
 	dofile(menupath .. DIR_DELIM .. "dlg_create_world.lua")
 	dofile(menupath .. DIR_DELIM .. "dlg_delete_mod.lua")
@@ -48,20 +60,32 @@ if PLATFORM ~= "Android" then
 	dofile(menupath .. DIR_DELIM .. "dlg_rename_modpack.lua")
 end
 
+	dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."multiplayer.lua")
+	dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."server.lua")
+
+	dofile(menupath .. DIR_DELIM .. "tab_singleplayer.lua")
+	dofile(menupath .. DIR_DELIM .. "tab_texturepacks.lua")
+	dofile(menupath .. DIR_DELIM .. "textures.lua")
+	
+if iseidy then
+	dofile(menupath .. DIR_DELIM .. "tab_eidy_main.lua")
+end
+
 local tabs = {}
 
 tabs.settings = dofile(menupath .. DIR_DELIM .. "tab_settings.lua")
 tabs.mods = dofile(menupath .. DIR_DELIM .. "tab_mods.lua")
-tabs.credits = dofile(menupath .. DIR_DELIM .. "tab_credits.lua")
+tabs.credits = dofile(menupath .. DIR_DELIM .. "tab_" .. tabtype .. "credits.lua")
+
 if PLATFORM == "Android" then
 	tabs.simple_main = dofile(menupath .. DIR_DELIM .. "tab_simple_main.lua")
 else
 	tabs.singleplayer = dofile(menupath .. DIR_DELIM .. "tab_singleplayer.lua")
-	tabs.multiplayer = dofile(menupath .. DIR_DELIM .. "tab_multiplayer.lua")
-	tabs.server = dofile(menupath .. DIR_DELIM .. "tab_server.lua")
+	tabs.multiplayer = dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."multiplayer.lua")
+	tabs.server = dofile(menupath .. DIR_DELIM .. "tab_".. tabtype .."server.lua")
 	tabs.texturepacks = dofile(menupath .. DIR_DELIM .. "tab_texturepacks.lua")
 end
-
+ 
 --------------------------------------------------------------------------------
 local function main_event_handler(tabview, event)
 	if event == "MenuQuit" then
@@ -125,6 +149,75 @@ local function init_globals()
 		end
 
 		mm_texture.init()
+	else
+		local world_list = core.get_worlds()
+		
+		local found_eid_world = false
+		
+		if iseidy then		
+			for i,world in pairs(world_list) do
+				if world.name == "eid" then
+					found_eid_world = true
+					gamedata.worldindex = i
+					break
+				end
+			end		
+		end
+
+		if not iseidy or not found_eid_world then
+			local found_singleplayerworld = false
+
+			for i,world in pairs(world_list) do
+				if world.name == "singleplayerworld" then
+					found_singleplayerworld = true
+					gamedata.worldindex = i
+					break
+				end
+			end
+
+			if not found_singleplayerworld then
+				core.create_world("singleplayerworld", 1)
+
+				local world_list = core.get_worlds()
+
+				for i,world in pairs(world_list) do
+					if world.name == "singleplayerworld" then
+						gamedata.worldindex = i
+						break
+					end
+				end
+			end
+		end
+	end
+
+	-- Create main tabview
+	local tv_main = tabview_create("maintab",{x=12,y=5.2},{x=0,y=0})
+	if PLATFORM ~= "Android" then
+		tv_main:set_autosave_tab(true)
+	end
+	if PLATFORM ~= "Android" then
+	    if not iseidy then
+			tv_main:add(tab_singleplayer)
+		end
+	    tv_main:add(tab_server)
+		tv_main:add(tab_multiplayer)
+
+	else
+		tv_main:add(tab_simple_main)
+	end
+	if not iseidy then
+	   tv_main:add(tab_settings)
+	end
+	if PLATFORM ~= "Android" then
+	    if not iseidy then
+			tv_main:add(tab_texturepacks)
+		end
+	end
+	if not iseidy then
+		tv_main:add(tab_mods)
+	end
+	tv_main:add(tab_credits)
+
 	end
 
 	-- Create main tabview
